@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
+import pytz
 
 # ==============================
 # File Paths
@@ -21,26 +22,30 @@ else:
     st.error("❌ No employee master file found! Upload employees.xlsx or employees.csv")
     st.stop()
 
-# Ensure all data is string type
-employees = employees.astype(str)
+employees = employees.astype(str)  # Ensure consistent format
 
 # ==============================
-# Attendance Logging
+# Timezone setup
+# ==============================
+CST = pytz.timezone("US/Central")
+
+# ==============================
+# Attendance logging
 # ==============================
 def log_attendance(emp_id, name, action):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_cst = datetime.now(pytz.utc).astimezone(CST)  # convert to CST
+    timestamp = now_cst.strftime("%m/%d/%y %I:%M:%S %p")  # mm/dd/yy 12hr format
     log_entry = pd.DataFrame(
         [[emp_id, name, action, timestamp]],
         columns=["EmpID", "Name", "Action", "Timestamp"]
     )
 
-    # Append to CSV
     if os.path.exists(ATTENDANCE_FILE):
         log_entry.to_csv(ATTENDANCE_FILE, mode="a", header=False, index=False)
     else:
         log_entry.to_csv(ATTENDANCE_FILE, mode="w", header=True, index=False)
 
-    st.success(f"{action} recorded for {name} at {timestamp}")
+    st.success(f"{action} recorded for {name} at {timestamp} CST")
 
 # ==============================
 # Streamlit UI
@@ -72,32 +77,56 @@ st.subheader("📊 Attendance Summary")
 
 if os.path.exists(ATTENDANCE_FILE):
     df = pd.read_csv(ATTENDANCE_FILE)
-    df["Timestamp"] = pd.to_datetime(df["Timestamp"])
-    df["Date"] = df["Timestamp"].dt.date
+    df["Timestamp"] = pd.to_datetime(df["Timestamp"], format="%m/%d/%y %I:%M:%S %p")
+    df["Date"] = df["Timestamp"].dt.strftime("%m/%d/%y")
+    df["Time"] = df["Timestamp"].dt.strftime("%I:%M:%S %p")
 
-    # Daily summary
-    st.markdown("### Today's Attendance")
-    today = datetime.now().date()
+    # ---- Daily Summary ----
+    st.markdown("### Today's Attendance Summary")
+    today = datetime.now(CST).strftime("%m/%d/%y")
     today_logs = df[df["Date"] == today]
-    st.dataframe(today_logs)
 
-    # Weekly summary
+    if not today_logs.empty:
+        daily_summary = []
+        for emp, group in today_logs.groupby("EmpID"):
+            checkins = group[group["Action"] == "Check In"]["Timestamp"]
+            checkouts = group[group["Action"] == "Check Out"]["Timestamp"]
+
+            first_in = checkins.min().strftime("%I:%M:%S %p") if not checkins.empty else "-"
+            last_out = checkouts.max().strftime("%I:%M:%S %p") if not checkouts.empty else "-"
+
+            if not checkins.empty and not checkouts.empty:
+                work_time = checkouts.max() - checkins.min()
+                work_time_str = str(work_time)  # H:M:S
+            else:
+                work_time_str = "0:00:00"
+
+            daily_summary.append([emp, group["Name"].iloc[0], first_in, last_out, work_time_str])
+
+        daily_df = pd.DataFrame(daily_summary, columns=["EmpID", "Name", "First Check-In", "Last Check-Out", "Hours Worked"])
+        st.dataframe(daily_df)
+    else:
+        st.info("No attendance logs for today.")
+
+    # ---- Weekly Summary ----
     st.markdown("### Weekly Summary (Hours Worked)")
     df["Week"] = df["Timestamp"].dt.strftime("%Y-%U")
-    summary = []
+    weekly_summary = []
 
     for (emp, week), group in df.groupby(["EmpID", "Week"]):
         checkins = group[group["Action"] == "Check In"]["Timestamp"]
         checkouts = group[group["Action"] == "Check Out"]["Timestamp"]
 
         if not checkins.empty and not checkouts.empty:
-            hours = (checkouts.max() - checkins.min()).total_seconds() / 3600
+            work_time = checkouts.max() - checkins.min()
+            work_time_str = str(work_time)
         else:
-            hours = 0
+            work_time_str = "0:00:00"
 
-        summary.append([emp, group["Name"].iloc[0], week, round(hours, 2)])
+        weekly_summary.append([emp, group["Name"].iloc[0], week, work_time_str])
 
-    summary_df = pd.DataFrame(summary, columns=["EmpID", "Name", "Week", "Hours Worked"])
-    st.dataframe(summary_df)
+    weekly_df = pd.DataFrame(weekly_summary, columns=["EmpID", "Name", "Week", "Hours Worked"])
+    st.dataframe(weekly_df)
+
 else:
     st.info("No attendance logs yet.")
