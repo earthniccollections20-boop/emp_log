@@ -78,7 +78,7 @@ st.subheader("📊 Attendance Summary")
 if os.path.exists(ATTENDANCE_FILE):
     df = pd.read_csv(ATTENDANCE_FILE)
 
-    # More flexible timestamp parsing
+    # Flexible timestamp parsing
     df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
     df = df.dropna(subset=["Timestamp"])  
 
@@ -105,19 +105,29 @@ if os.path.exists(ATTENDANCE_FILE):
             else:
                 work_time_str = "0:00:00"
 
-            daily_summary.append([emp, group["Name"].iloc[0], first_in, last_out, work_time_str])
+            daily_summary.append([
+                emp,
+                group["Name"].iloc[0],
+                today,
+                first_in,
+                last_out,
+                work_time_str
+            ])
 
-        daily_df = pd.DataFrame(daily_summary, columns=["EmpID", "Name", "First Check-In", "Last Check-Out", "Hours Worked"])
+        daily_df = pd.DataFrame(
+            daily_summary,
+            columns=["EmpID", "Name", "Date", "First Check-In", "Last Check-Out", "Hours Worked"]
+        )
         st.dataframe(daily_df)
     else:
         st.info("No attendance logs for today.")
 
-    # ---- Weekly Summary ----
-    st.markdown("### Weekly Summary (Hours Worked)")
-    df["Week"] = df["Timestamp"].dt.strftime("%Y-%U")
-    weekly_summary = []
+    # ---- Monthly Summary ----
+    st.markdown("### Monthly Summary (Hours Worked)")
+    df["Month"] = df["Timestamp"].dt.strftime("%Y-%m")  # Year-Month
+    monthly_summary = []
 
-    for (emp, week), group in df.groupby(["EmpID", "Week"]):
+    for (emp, month), group in df.groupby(["EmpID", "Month"]):
         checkins = group[group["Action"] == "Check In"]["Timestamp"]
         checkouts = group[group["Action"] == "Check Out"]["Timestamp"]
 
@@ -127,10 +137,10 @@ if os.path.exists(ATTENDANCE_FILE):
         else:
             work_time_str = "0:00:00"
 
-        weekly_summary.append([emp, group["Name"].iloc[0], week, work_time_str])
+        monthly_summary.append([emp, group["Name"].iloc[0], month, work_time_str])
 
-    weekly_df = pd.DataFrame(weekly_summary, columns=["EmpID", "Name", "Week", "Hours Worked"])
-    st.dataframe(weekly_df)
+    monthly_df = pd.DataFrame(monthly_summary, columns=["EmpID", "Name", "Month", "Hours Worked"])
+    st.dataframe(monthly_df)
 
 else:
     st.info("No attendance logs yet.")
