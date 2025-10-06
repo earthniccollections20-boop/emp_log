@@ -4,21 +4,28 @@ import os
 from datetime import datetime
 
 # ==============================
-# 1. Load employee master data
+# File Paths
 # ==============================
-EMP_FILE = "employees.xlsx"
+EMP_EXCEL = "employees.xlsx"
+EMP_CSV = "employees.csv"
 ATTENDANCE_FILE = "attendance.csv"
 
-# Load employee master list
-if os.path.exists(EMP_FILE):
-    employees = pd.read_excel(EMP_FILE)
-    employees = employees.astype(str)  # ensure consistent string type
+# ==============================
+# Load Employee Master
+# ==============================
+if os.path.exists(EMP_EXCEL):
+    employees = pd.read_excel(EMP_EXCEL, engine="openpyxl")
+elif os.path.exists(EMP_CSV):
+    employees = pd.read_csv(EMP_CSV)
 else:
-    st.error(f"Employee master file {EMP_FILE} not found!")
+    st.error("❌ No employee master file found! Upload employees.xlsx or employees.csv")
     st.stop()
 
+# Ensure all data is string type
+employees = employees.astype(str)
+
 # ==============================
-# 2. Attendance logging function
+# Attendance Logging
 # ==============================
 def log_attendance(emp_id, name, action):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -36,11 +43,10 @@ def log_attendance(emp_id, name, action):
     st.success(f"{action} recorded for {name} at {timestamp}")
 
 # ==============================
-# 3. UI
+# Streamlit UI
 # ==============================
 st.title("🕒 Office Attendance Tracker")
 
-# Employee input
 emp_id = st.text_input("Enter Employee ID")
 name = st.text_input("Enter Name")
 
@@ -60,7 +66,7 @@ with col2:
             st.error("❌ Invalid Employee ID or Name")
 
 # ==============================
-# 4. Attendance summary
+# Attendance Summary
 # ==============================
 st.subheader("📊 Attendance Summary")
 
