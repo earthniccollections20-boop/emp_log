@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import os
 from datetime import datetime
 import pytz
 from io import BytesIO
@@ -12,7 +11,6 @@ st.set_page_config(page_title="MK Law Attendance Tracker", layout="wide")
 
 EMP_EXCEL = "employees.xlsx"
 EMP_CSV = "employees.csv"
-ATTENDANCE_FILE = "attendance.csv"
 
 # ==============================
 # Load Employee Master
@@ -33,16 +31,23 @@ employees = employees.astype(str)
 CST = pytz.timezone("America/Chicago")
 
 # ==============================
+# Global attendance storage (in memory only)
+# ==============================
+if "attendance" not in st.session_state:
+    st.session_state["attendance"] = pd.DataFrame(columns=["EmpID", "Name", "Action", "Timestamp"])
+
+# ==============================
 # Attendance logging
 # ==============================
 def log_attendance(emp_id, name, action):
     now_cst = datetime.now(CST)
-    iso_time = now_cst.isoformat()
-    log_entry = pd.DataFrame(
-        [[emp_id, name, action, iso_time]],
-        columns=["EmpID", "Name", "Action", "Timestamp"]
+    st.session_state["attendance"] = pd.concat(
+        [
+            st.session_state["attendance"],
+            pd.DataFrame([[emp_id, name, action, now_cst]], columns=["EmpID", "Name", "Action", "Timestamp"])
+        ],
+        ignore_index=True
     )
-    log_entry.to_csv(ATTENDANCE_FILE, mode="a", header=not os.path.exists(ATTENDANCE_FILE), index=False)
     st.success(f"{action} recorded for {name} at {now_cst.strftime('%m/%d/%y %I:%M:%S %p')} CST/CDT")
 
 # ==============================
@@ -101,16 +106,10 @@ admin_pass = st.sidebar.text_input("Enter Admin Password", type="password")
 if admin_pass == "mysecretpassword":   # 🔑 change this password
     st.subheader("📊 Attendance Summary (CST/CDT)")
 
-    if os.path.exists(ATTENDANCE_FILE):
-        df = pd.read_csv(ATTENDANCE_FILE)
+    df = st.session_state["attendance"].copy()
 
-        # Always reload fresh data
-        df = df.copy()
-
-        # Parse timestamps
-        df["Timestamp"] = pd.to_datetime(df["Timestamp"], utc=True, errors="coerce")
-        df = df.dropna(subset=["Timestamp"])
-        df["Timestamp"] = df["Timestamp"].dt.tz_convert("America/Chicago")
+    if not df.empty:
+        df["Timestamp"] = pd.to_datetime(df["Timestamp"])
         df["Date"] = df["Timestamp"].dt.strftime("%m/%d/%y")
         df["Time"] = df["Timestamp"].dt.strftime("%I:%M:%S %p")
         df["Month"] = df["Timestamp"].dt.strftime("%Y-%m")
