@@ -107,8 +107,8 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
                     total_work += (checkouts[i] - checkins[i])
 
                 hours, remainder = divmod(total_work.seconds, 3600)
-                minutes = remainder // 60
-                work_time_str = f"{hours:02d}:{minutes:02d}"
+                minutes, seconds = divmod(remainder, 60)
+                work_time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
                 first_in = checkins[0].strftime("%I:%M %p") if checkins else "-"
                 last_out = checkouts[-1].strftime("%I:%M %p") if checkouts else "-"
@@ -124,7 +124,7 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
 
             daily_df = pd.DataFrame(
                 daily_summary,
-                columns=["EmpID", "Name", "Date", "First Check-In", "Last Check-Out", "Hours Worked (HH:MM)"]
+                columns=["EmpID", "Name", "Date", "First Check-In", "Last Check-Out", "Hours Worked (HH:MM:SS)"]
             )
             st.dataframe(daily_df)
         else:
@@ -145,12 +145,12 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
                 total_work += (checkouts[i] - checkins[i])
 
             hours, remainder = divmod(total_work.seconds, 3600)
-            minutes = remainder // 60
-            work_time_str = f"{hours:02d}:{minutes:02d}"
+            minutes, seconds = divmod(remainder, 60)
+            work_time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
             monthly_summary.append([emp, emp_name, month, work_time_str])
 
-        monthly_df = pd.DataFrame(monthly_summary, columns=["EmpID", "Name", "Month", "Hours Worked (HH:MM)"])
+        monthly_df = pd.DataFrame(monthly_summary, columns=["EmpID", "Name", "Month", "Hours Worked (HH:MM:SS)"])
         st.dataframe(monthly_df)
 
     else:
