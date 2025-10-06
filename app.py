@@ -6,8 +6,10 @@ import pytz
 from io import BytesIO
 
 # ==============================
-# File Paths
+# Config
 # ==============================
+st.set_page_config(page_title="MK Law Attendance Tracker", layout="wide")
+
 EMP_EXCEL = "employees.xlsx"
 EMP_CSV = "employees.csv"
 ATTENDANCE_FILE = "attendance.csv"
@@ -23,7 +25,7 @@ else:
     st.error("❌ No employee master file found! Upload employees.xlsx or employees.csv")
     st.stop()
 
-employees = employees.astype(str)  # Ensure consistent format
+employees = employees.astype(str)
 
 # ==============================
 # Timezone setup
@@ -40,10 +42,7 @@ def log_attendance(emp_id, name, action):
         [[emp_id, name, action, iso_time]],
         columns=["EmpID", "Name", "Action", "Timestamp"]
     )
-
-    # Always append properly
     log_entry.to_csv(ATTENDANCE_FILE, mode="a", header=not os.path.exists(ATTENDANCE_FILE), index=False)
-
     st.success(f"{action} recorded for {name} at {now_cst.strftime('%m/%d/%y %I:%M:%S %p')} CST/CDT")
 
 # ==============================
@@ -54,6 +53,21 @@ def to_excel(df):
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Sheet1")
     return output.getvalue()
+
+# ==============================
+# Worktime calculation helper
+# ==============================
+def calculate_worktime(checkins, checkouts):
+    total = pd.Timedelta(0)
+    i, j = 0, 0
+    while i < len(checkins) and j < len(checkouts):
+        if checkouts[j] > checkins[i]:
+            total += (checkouts[j] - checkins[i])
+            i += 1
+            j += 1
+        else:
+            j += 1
+    return total
 
 # ==============================
 # Streamlit UI
@@ -79,7 +93,7 @@ with col2:
             st.error("❌ Invalid Employee ID or Name")
 
 # ==============================
-# Admin Access (Password Protected)
+# Admin Access
 # ==============================
 st.sidebar.subheader("🔒 Admin Login")
 admin_pass = st.sidebar.text_input("Enter Admin Password", type="password")
@@ -90,6 +104,9 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
     if os.path.exists(ATTENDANCE_FILE):
         df = pd.read_csv(ATTENDANCE_FILE)
 
+        # Always reload fresh data
+        df = df.copy()
+
         # Parse timestamps
         df["Timestamp"] = pd.to_datetime(df["Timestamp"], utc=True, errors="coerce")
         df = df.dropna(subset=["Timestamp"])
@@ -98,7 +115,7 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
         df["Time"] = df["Timestamp"].dt.strftime("%I:%M:%S %p")
         df["Month"] = df["Timestamp"].dt.strftime("%Y-%m")
 
-        # ---- Daily Summary (with date filter) ----
+        # ---- Daily Summary ----
         st.markdown("### 📅 Daily Attendance Summary")
         day_filter = st.date_input("Select a date", datetime.now(CST).date())
         day_str = day_filter.strftime("%m/%d/%y")
@@ -111,9 +128,7 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
                 checkins = group.loc[group["Action"] == "Check In", "Timestamp"].sort_values().tolist()
                 checkouts = group.loc[group["Action"] == "Check Out", "Timestamp"].sort_values().tolist()
 
-                total_work = pd.Timedelta(0)
-                for i in range(min(len(checkins), len(checkouts))):
-                    total_work += (checkouts[i] - checkins[i])
+                total_work = calculate_worktime(checkins, checkouts)
 
                 total_secs = int(total_work.total_seconds())
                 hours, remainder = divmod(total_secs, 3600)
@@ -140,7 +155,7 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
         else:
             st.info(f"No attendance logs for {day_str}.")
 
-        # ---- Monthly Summary (with month filter) ----
+        # ---- Monthly Summary ----
         st.markdown("### 📅 Monthly Attendance Summary")
         month_filter = st.selectbox("Select a month", sorted(df["Month"].unique(), reverse=True))
         month_logs = df[df["Month"] == month_filter]
@@ -152,9 +167,7 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
                 checkins = group.loc[group["Action"] == "Check In", "Timestamp"].sort_values().tolist()
                 checkouts = group.loc[group["Action"] == "Check Out", "Timestamp"].sort_values().tolist()
 
-                total_work = pd.Timedelta(0)
-                for i in range(min(len(checkins), len(checkouts))):
-                    total_work += (checkouts[i] - checkins[i])
+                total_work = calculate_worktime(checkins, checkouts)
 
                 total_secs = int(total_work.total_seconds())
                 hours, remainder = divmod(total_secs, 3600)
@@ -180,5 +193,4 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
     else:
         st.info("No attendance logs yet.")
 
-elif admin_pass != "":
-    st.sidebar.error("❌ Wrong password! Access denied.")
+elif admin_pass !=_
