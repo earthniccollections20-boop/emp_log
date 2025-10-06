@@ -77,7 +77,11 @@ st.subheader("📊 Attendance Summary")
 
 if os.path.exists(ATTENDANCE_FILE):
     df = pd.read_csv(ATTENDANCE_FILE)
-    df["Timestamp"] = pd.to_datetime(df["Timestamp"], format="%m/%d/%y %I:%M:%S %p")
+
+    # More flexible timestamp parsing
+    df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
+    df = df.dropna(subset=["Timestamp"])  
+
     df["Date"] = df["Timestamp"].dt.strftime("%m/%d/%y")
     df["Time"] = df["Timestamp"].dt.strftime("%I:%M:%S %p")
 
