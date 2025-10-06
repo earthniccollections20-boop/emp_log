@@ -52,6 +52,7 @@ def log_attendance(emp_id, name, action):
 # ==============================
 st.title("🕒 Office Attendance Tracker (CST)")
 
+# ---- Employee Punch UI ----
 emp_id = st.text_input("Enter Employee ID")
 name = st.text_input("Enter Name")
 
@@ -71,79 +72,86 @@ with col2:
             st.error("❌ Invalid Employee ID or Name")
 
 # ==============================
-# Attendance Summary
+# Admin Access (Password Protected)
 # ==============================
-st.subheader("📊 Attendance Summary (CST)")
+st.sidebar.subheader("🔒 Admin Login")
+admin_pass = st.sidebar.text_input("Enter Admin Password", type="password")
 
-if os.path.exists(ATTENDANCE_FILE):
-    df = pd.read_csv(ATTENDANCE_FILE)
+if admin_pass == "mysecretpassword":   # 🔑 change to your own strong password
+    st.subheader("📊 Attendance Summary (CST)")
 
-    # Parse timestamps flexibly
-    df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
-    df = df.dropna(subset=["Timestamp"])  
+    if os.path.exists(ATTENDANCE_FILE):
+        df = pd.read_csv(ATTENDANCE_FILE)
 
-    df["Date"] = df["Timestamp"].dt.strftime("%m/%d/%y")
-    df["Time"] = df["Timestamp"].dt.strftime("%I:%M:%S %p")
+        # Parse timestamps flexibly
+        df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
+        df = df.dropna(subset=["Timestamp"])  
 
-    # ---- Daily Summary ----
-    st.markdown("### Today's Attendance Summary")
-    today = datetime.now(CST).strftime("%m/%d/%y")
-    today_logs = df[df["Date"] == today]
+        df["Date"] = df["Timestamp"].dt.strftime("%m/%d/%y")
+        df["Time"] = df["Timestamp"].dt.strftime("%I:%M:%S %p")
 
-    if not today_logs.empty:
-        daily_summary = []
-        for emp, group in today_logs.groupby("EmpID"):
+        # ---- Daily Summary ----
+        st.markdown("### Today's Attendance Summary")
+        today = datetime.now(CST).strftime("%m/%d/%y")
+        today_logs = df[df["Date"] == today]
+
+        if not today_logs.empty:
+            daily_summary = []
+            for emp, group in today_logs.groupby("EmpID"):
+                emp_name = group["Name"].iloc[0]
+                checkins = group[group["Action"] == "Check In"]["Timestamp"].sort_values().tolist()
+                checkouts = group[group["Action"] == "Check Out"]["Timestamp"].sort_values().tolist()
+
+                # Calculate total worked time for split shifts
+                total_work = pd.Timedelta(0)
+                for i in range(min(len(checkins), len(checkouts))):
+                    total_work += (checkouts[i] - checkins[i])
+
+                work_time_str = str(total_work) if total_work != pd.Timedelta(0) else "0:00:00"
+
+                first_in = checkins[0].strftime("%I:%M:%S %p") if checkins else "-"
+                last_out = checkouts[-1].strftime("%I:%M:%S %p") if checkouts else "-"
+
+                daily_summary.append([
+                    emp,
+                    emp_name,
+                    today,
+                    first_in,
+                    last_out,
+                    work_time_str
+                ])
+
+            daily_df = pd.DataFrame(
+                daily_summary,
+                columns=["EmpID", "Name", "Date", "First Check-In", "Last Check-Out", "Hours Worked"]
+            )
+            st.dataframe(daily_df)
+        else:
+            st.info("No attendance logs for today.")
+
+        # ---- Monthly Summary ----
+        st.markdown("### Monthly Summary (Hours Worked)")
+        df["Month"] = df["Timestamp"].dt.strftime("%Y-%m")  # Year-Month
+        monthly_summary = []
+
+        for (emp, month), group in df.groupby(["EmpID", "Month"]):
             emp_name = group["Name"].iloc[0]
             checkins = group[group["Action"] == "Check In"]["Timestamp"].sort_values().tolist()
             checkouts = group[group["Action"] == "Check Out"]["Timestamp"].sort_values().tolist()
 
-            # Calculate total worked time for split shifts
             total_work = pd.Timedelta(0)
             for i in range(min(len(checkins), len(checkouts))):
                 total_work += (checkouts[i] - checkins[i])
 
             work_time_str = str(total_work) if total_work != pd.Timedelta(0) else "0:00:00"
 
-            first_in = checkins[0].strftime("%I:%M:%S %p") if checkins else "-"
-            last_out = checkouts[-1].strftime("%I:%M:%S %p") if checkouts else "-"
+            monthly_summary.append([emp, emp_name, month, work_time_str])
 
-            daily_summary.append([
-                emp,
-                emp_name,
-                today,
-                first_in,
-                last_out,
-                work_time_str
-            ])
+        monthly_df = pd.DataFrame(monthly_summary, columns=["EmpID", "Name", "Month", "Hours Worked"])
+        st.dataframe(monthly_df)
 
-        daily_df = pd.DataFrame(
-            daily_summary,
-            columns=["EmpID", "Name", "Date", "First Check-In", "Last Check-Out", "Hours Worked"]
-        )
-        st.dataframe(daily_df)
     else:
-        st.info("No attendance logs for today.")
+        st.info("No attendance logs yet.")
 
-    # ---- Monthly Summary ----
-    st.markdown("### Monthly Summary (Hours Worked)")
-    df["Month"] = df["Timestamp"].dt.strftime("%Y-%m")  # Year-Month
-    monthly_summary = []
-
-    for (emp, month), group in df.groupby(["EmpID", "Month"]):
-        emp_name = group["Name"].iloc[0]
-        checkins = group[group["Action"] == "Check In"]["Timestamp"].sort_values().tolist()
-        checkouts = group[group["Action"] == "Check Out"]["Timestamp"].sort_values().tolist()
-
-        total_work = pd.Timedelta(0)
-        for i in range(min(len(checkins), len(checkouts))):
-            total_work += (checkouts[i] - checkins[i])
-
-        work_time_str = str(total_work) if total_work != pd.Timedelta(0) else "0:00:00"
-
-        monthly_summary.append([emp, emp_name, month, work_time_str])
-
-    monthly_df = pd.DataFrame(monthly_summary, columns=["EmpID", "Name", "Month", "Hours Worked"])
-    st.dataframe(monthly_df)
-
-else:
-    st.info("No attendance logs yet.")
+elif admin_pass != "":
+    st.sidebar.error("❌ Wrong password! Access denied.")
