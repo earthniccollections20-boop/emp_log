@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import os
 from datetime import datetime
 import pytz
 from io import BytesIO
@@ -20,8 +21,15 @@ if os.path.exists(EMP_EXCEL):
 elif os.path.exists(EMP_CSV):
     employees = pd.read_csv(EMP_CSV)
 else:
-    st.error("❌ No employee master file found! Upload employees.xlsx or employees.csv")
-    st.stop()
+    st.warning("⚠️ No employee master file found! Please upload one.")
+    uploaded = st.file_uploader("Upload employees.xlsx or employees.csv", type=["xlsx", "csv"])
+    if uploaded is not None:
+        if uploaded.name.endswith(".xlsx"):
+            employees = pd.read_excel(uploaded, engine="openpyxl")
+        else:
+            employees = pd.read_csv(uploaded)
+    else:
+        st.stop()
 
 employees = employees.astype(str)
 
@@ -31,7 +39,7 @@ employees = employees.astype(str)
 CST = pytz.timezone("America/Chicago")
 
 # ==============================
-# Global attendance storage (in memory only)
+# Attendance storage (memory only)
 # ==============================
 if "attendance" not in st.session_state:
     st.session_state["attendance"] = pd.DataFrame(columns=["EmpID", "Name", "Action", "Timestamp"])
@@ -60,7 +68,7 @@ def to_excel(df):
     return output.getvalue()
 
 # ==============================
-# Worktime calculation helper
+# Worktime calculation
 # ==============================
 def calculate_worktime(checkins, checkouts):
     total = pd.Timedelta(0)
