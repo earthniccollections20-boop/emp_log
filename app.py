@@ -27,13 +27,13 @@ employees = employees.astype(str)  # Ensure consistent format
 # ==============================
 # Timezone setup
 # ==============================
-CST = pytz.timezone("America/Chicago")  # Central Time
+CST = pytz.timezone("America/Chicago")
 
 # ==============================
 # Attendance logging
 # ==============================
 def log_attendance(emp_id, name, action):
-    now_cst = datetime.now(pytz.utc).astimezone(CST)  # system time → CST
+    now_cst = datetime.now(CST)  # direct CST system time
     timestamp = now_cst.strftime("%m/%d/%y %I:%M:%S %p")  # mm/dd/yy 12hr format
     log_entry = pd.DataFrame(
         [[emp_id, name, action, timestamp]],
@@ -52,7 +52,6 @@ def log_attendance(emp_id, name, action):
 # ==============================
 st.title("🕒 Office Attendance Tracker (CST)")
 
-# ---- Employee Punch UI ----
 emp_id = st.text_input("Enter Employee ID")
 name = st.text_input("Enter Name")
 
@@ -77,13 +76,13 @@ with col2:
 st.sidebar.subheader("🔒 Admin Login")
 admin_pass = st.sidebar.text_input("Enter Admin Password", type="password")
 
-if admin_pass == "mysecretpassword":   # 🔑 change to your own strong password
+if admin_pass == "mysecretpassword":   # 🔑 change this password
     st.subheader("📊 Attendance Summary (CST)")
 
     if os.path.exists(ATTENDANCE_FILE):
         df = pd.read_csv(ATTENDANCE_FILE)
 
-        # Parse timestamps flexibly
+        # Parse timestamps
         df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
         df = df.dropna(subset=["Timestamp"])  
 
@@ -102,15 +101,17 @@ if admin_pass == "mysecretpassword":   # 🔑 change to your own strong password
                 checkins = group[group["Action"] == "Check In"]["Timestamp"].sort_values().tolist()
                 checkouts = group[group["Action"] == "Check Out"]["Timestamp"].sort_values().tolist()
 
-                # Calculate total worked time for split shifts
+                # Calculate total worked time (all sessions)
                 total_work = pd.Timedelta(0)
                 for i in range(min(len(checkins), len(checkouts))):
                     total_work += (checkouts[i] - checkins[i])
 
-                work_time_str = str(total_work) if total_work != pd.Timedelta(0) else "0:00:00"
+                hours, remainder = divmod(total_work.seconds, 3600)
+                minutes = remainder // 60
+                work_time_str = f"{hours:02d}:{minutes:02d}"
 
-                first_in = checkins[0].strftime("%I:%M:%S %p") if checkins else "-"
-                last_out = checkouts[-1].strftime("%I:%M:%S %p") if checkouts else "-"
+                first_in = checkins[0].strftime("%I:%M %p") if checkins else "-"
+                last_out = checkouts[-1].strftime("%I:%M %p") if checkouts else "-"
 
                 daily_summary.append([
                     emp,
@@ -123,7 +124,7 @@ if admin_pass == "mysecretpassword":   # 🔑 change to your own strong password
 
             daily_df = pd.DataFrame(
                 daily_summary,
-                columns=["EmpID", "Name", "Date", "First Check-In", "Last Check-Out", "Hours Worked"]
+                columns=["EmpID", "Name", "Date", "First Check-In", "Last Check-Out", "Hours Worked (HH:MM)"]
             )
             st.dataframe(daily_df)
         else:
@@ -143,11 +144,13 @@ if admin_pass == "mysecretpassword":   # 🔑 change to your own strong password
             for i in range(min(len(checkins), len(checkouts))):
                 total_work += (checkouts[i] - checkins[i])
 
-            work_time_str = str(total_work) if total_work != pd.Timedelta(0) else "0:00:00"
+            hours, remainder = divmod(total_work.seconds, 3600)
+            minutes = remainder // 60
+            work_time_str = f"{hours:02d}:{minutes:02d}"
 
             monthly_summary.append([emp, emp_name, month, work_time_str])
 
-        monthly_df = pd.DataFrame(monthly_summary, columns=["EmpID", "Name", "Month", "Hours Worked"])
+        monthly_df = pd.DataFrame(monthly_summary, columns=["EmpID", "Name", "Month", "Hours Worked (HH:MM)"])
         st.dataframe(monthly_df)
 
     else:
