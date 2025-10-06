@@ -3,6 +3,7 @@ import pandas as pd
 import os
 from datetime import datetime
 import pytz
+from io import BytesIO
 
 # ==============================
 # File Paths
@@ -33,10 +34,10 @@ CST = pytz.timezone("America/Chicago")
 # Attendance logging
 # ==============================
 def log_attendance(emp_id, name, action):
-    now_cst = datetime.now(CST)  # always in America/Chicago timezone
-    timestamp = now_cst.strftime("%m/%d/%y %I:%M:%S %p")  # mm/dd/yy 12hr format
+    now_cst = datetime.now(CST)
+    iso_time = now_cst.isoformat()  # stored cleanly
     log_entry = pd.DataFrame(
-        [[emp_id, name, action, timestamp]],
+        [[emp_id, name, action, iso_time]],
         columns=["EmpID", "Name", "Action", "Timestamp"]
     )
 
@@ -45,7 +46,7 @@ def log_attendance(emp_id, name, action):
     else:
         log_entry.to_csv(ATTENDANCE_FILE, mode="w", header=True, index=False)
 
-    st.success(f"{action} recorded for {name} at {timestamp} CST/CDT")
+    st.success(f"{action} recorded for {name} at {now_cst.strftime('%m/%d/%y %I:%M:%S %p')} CST/CDT")
 
 # ==============================
 # Streamlit UI
@@ -76,13 +77,21 @@ with col2:
 st.sidebar.subheader("🔒 Admin Login")
 admin_pass = st.sidebar.text_input("Enter Admin Password", type="password")
 
+# Utility: Convert dataframe to Excel
+def to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Sheet1")
+    processed_data = output.getvalue()
+    return processed_data
+
 if admin_pass == "mysecretpassword":   # 🔑 change this password
     st.subheader("📊 Attendance Summary (CST/CDT)")
 
     if os.path.exists(ATTENDANCE_FILE):
         df = pd.read_csv(ATTENDANCE_FILE)
 
-        # Parse timestamps
+        # Parse timestamps from ISO
         df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
         df = df.dropna(subset=["Timestamp"])  
 
@@ -101,7 +110,7 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
                 checkins = group[group["Action"] == "Check In"]["Timestamp"].sort_values().tolist()
                 checkouts = group[group["Action"] == "Check Out"]["Timestamp"].sort_values().tolist()
 
-                # Calculate total worked time (all sessions)
+                # Calculate total worked time
                 total_work = pd.Timedelta(0)
                 for i in range(min(len(checkins), len(checkouts))):
                     total_work += (checkouts[i] - checkins[i])
@@ -128,6 +137,14 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
                 columns=["EmpID", "Name", "Date", "First Check-In", "Last Check-Out", "Hours Worked (HH:MM:SS)"]
             )
             st.dataframe(daily_df)
+
+            # Download daily summary
+            st.download_button(
+                label="⬇️ Download Daily Summary (Excel)",
+                data=to_excel(daily_df),
+                file_name=f"daily_summary_{today}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         else:
             st.info("No attendance logs for today.")
 
@@ -154,6 +171,14 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
 
         monthly_df = pd.DataFrame(monthly_summary, columns=["EmpID", "Name", "Month", "Hours Worked (HH:MM:SS)"])
         st.dataframe(monthly_df)
+
+        # Download monthly summary
+        st.download_button(
+            label="⬇️ Download Monthly Summary (Excel)",
+            data=to_excel(monthly_df),
+            file_name="monthly_summary.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
     else:
         st.info("No attendance logs yet.")
