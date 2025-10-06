@@ -193,4 +193,5 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
     else:
         st.info("No attendance logs yet.")
 
-elif admin_pass !=_
+elif admin_pass != "":
+    st.sidebar.error("❌ Wrong password! Access denied.")
