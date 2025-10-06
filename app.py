@@ -33,7 +33,7 @@ CST = pytz.timezone("America/Chicago")
 # Attendance logging
 # ==============================
 def log_attendance(emp_id, name, action):
-    now_cst = datetime.now(CST)  # direct CST system time
+    now_cst = datetime.now(CST)  # always in America/Chicago timezone
     timestamp = now_cst.strftime("%m/%d/%y %I:%M:%S %p")  # mm/dd/yy 12hr format
     log_entry = pd.DataFrame(
         [[emp_id, name, action, timestamp]],
@@ -45,12 +45,12 @@ def log_attendance(emp_id, name, action):
     else:
         log_entry.to_csv(ATTENDANCE_FILE, mode="w", header=True, index=False)
 
-    st.success(f"{action} recorded for {name} at {timestamp} CST")
+    st.success(f"{action} recorded for {name} at {timestamp} CST/CDT")
 
 # ==============================
 # Streamlit UI
 # ==============================
-st.title("🕒 Office Attendance Tracker (CST)")
+st.title("⚖️ MK Law Attendance Tracker")
 
 emp_id = st.text_input("Enter Employee ID")
 name = st.text_input("Enter Name")
@@ -77,7 +77,7 @@ st.sidebar.subheader("🔒 Admin Login")
 admin_pass = st.sidebar.text_input("Enter Admin Password", type="password")
 
 if admin_pass == "mysecretpassword":   # 🔑 change this password
-    st.subheader("📊 Attendance Summary (CST)")
+    st.subheader("📊 Attendance Summary (CST/CDT)")
 
     if os.path.exists(ATTENDANCE_FILE):
         df = pd.read_csv(ATTENDANCE_FILE)
@@ -106,7 +106,8 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
                 for i in range(min(len(checkins), len(checkouts))):
                     total_work += (checkouts[i] - checkins[i])
 
-                hours, remainder = divmod(total_work.seconds, 3600)
+                total_secs = int(total_work.total_seconds())
+                hours, remainder = divmod(total_secs, 3600)
                 minutes, seconds = divmod(remainder, 60)
                 work_time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
@@ -144,7 +145,8 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
             for i in range(min(len(checkins), len(checkouts))):
                 total_work += (checkouts[i] - checkins[i])
 
-            hours, remainder = divmod(total_work.seconds, 3600)
+            total_secs = int(total_work.total_seconds())
+            hours, remainder = divmod(total_secs, 3600)
             minutes, seconds = divmod(remainder, 60)
             work_time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
