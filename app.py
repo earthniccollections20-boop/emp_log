@@ -35,7 +35,7 @@ CST = pytz.timezone("America/Chicago")
 # ==============================
 def log_attendance(emp_id, name, action):
     now_cst = datetime.now(CST)
-    iso_time = now_cst.isoformat()  # stored cleanly in UTC offset
+    iso_time = now_cst.isoformat()  # store in ISO
     log_entry = pd.DataFrame(
         [[emp_id, name, action, iso_time]],
         columns=["EmpID", "Name", "Action", "Timestamp"]
@@ -92,14 +92,13 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
     if os.path.exists(ATTENDANCE_FILE):
         df = pd.read_csv(ATTENDANCE_FILE)
 
-        # Parse timestamps properly
+        # Parse timestamps
         df["Timestamp"] = pd.to_datetime(df["Timestamp"], utc=True, errors="coerce")
         df = df.dropna(subset=["Timestamp"])
-
-        # Convert to CST/CDT for display
         df["Timestamp"] = df["Timestamp"].dt.tz_convert("America/Chicago")
         df["Date"] = df["Timestamp"].dt.strftime("%m/%d/%y")
         df["Time"] = df["Timestamp"].dt.strftime("%I:%M:%S %p")
+        df["Month"] = df["Timestamp"].dt.strftime("%Y-%m")
 
         # ---- Daily Summary ----
         st.markdown("### Today's Attendance Summary")
@@ -110,4 +109,104 @@ if admin_pass == "mysecretpassword":   # 🔑 change this password
             daily_summary = []
             for emp, group in today_logs.groupby("EmpID"):
                 emp_name = group["Name"].iloc[0]
-                checkins = group[group["Action"] == "Check In"]["Timestamp"].sort_values().toli_
+                checkins = group.loc[group["Action"] == "Check In", "Timestamp"].sort_values().tolist()
+                checkouts = group.loc[group["Action"] == "Check Out", "Timestamp"].sort_values().tolist()
+
+                total_work = pd.Timedelta(0)
+                for i in range(min(len(checkins), len(checkouts))):
+                    total_work += (checkouts[i] - checkins[i])
+
+                total_secs = int(total_work.total_seconds())
+                hours, remainder = divmod(total_secs, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                work_time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+                first_in = checkins[0].strftime("%I:%M %p") if checkins else "-"
+                last_out = checkouts[-1].strftime("%I:%M %p") if checkouts else "-"
+
+                daily_summary.append([emp, emp_name, today, first_in, last_out, work_time_str])
+
+            daily_df = pd.DataFrame(
+                daily_summary,
+                columns=["EmpID", "Name", "Date", "First Check-In", "Last Check-Out", "Hours Worked (HH:MM:SS)"]
+            )
+            st.dataframe(daily_df)
+
+            st.download_button(
+                "⬇️ Download Today's Summary (Excel)",
+                data=to_excel(daily_df),
+                file_name=f"daily_summary_{today}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        else:
+            st.info("No attendance logs for today.")
+
+        # ---- Monthly Summary ----
+        st.markdown("### Monthly Summary (Hours Worked)")
+        monthly_summary = []
+
+        for (emp, month), group in df.groupby(["EmpID", "Month"]):
+            emp_name = group["Name"].iloc[0]
+            checkins = group.loc[group["Action"] == "Check In", "Timestamp"].sort_values().tolist()
+            checkouts = group.loc[group["Action"] == "Check Out", "Timestamp"].sort_values().tolist()
+
+            total_work = pd.Timedelta(0)
+            for i in range(min(len(checkins), len(checkouts))):
+                total_work += (checkouts[i] - checkins[i])
+
+            total_secs = int(total_work.total_seconds())
+            hours, remainder = divmod(total_secs, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            work_time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+            monthly_summary.append([emp, emp_name, month, work_time_str])
+
+        monthly_df = pd.DataFrame(
+            monthly_summary,
+            columns=["EmpID", "Name", "Month", "Hours Worked (HH:MM:SS)"]
+        )
+        st.dataframe(monthly_df)
+
+        st.download_button(
+            "⬇️ Download Monthly Summary (Excel)",
+            data=to_excel(monthly_df),
+            file_name="monthly_summary.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        # ---- Extra Admin Filters ----
+        st.markdown("### 🔍 Admin Filters")
+        # Filter by day
+        day_filter = st.date_input("Select a day", datetime.now(CST).date())
+        day_str = day_filter.strftime("%m/%d/%y")
+        filtered_day = df[df["Date"] == day_str]
+
+        if not filtered_day.empty:
+            st.write(f"Filtered logs for {day_str}:")
+            st.dataframe(filtered_day)
+            st.download_button(
+                "⬇️ Download Filtered Day Logs (Excel)",
+                data=to_excel(filtered_day),
+                file_name=f"attendance_day_{day_str}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        # Filter by month
+        month_filter = st.selectbox("Select a month", sorted(df["Month"].unique(), reverse=True))
+        filtered_month = df[df["Month"] == month_filter]
+
+        if not filtered_month.empty:
+            st.write(f"Filtered logs for {month_filter}:")
+            st.dataframe(filtered_month)
+            st.download_button(
+                "⬇️ Download Filtered Month Logs (Excel)",
+                data=to_excel(filtered_month),
+                file_name=f"attendance_month_{month_filter}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+    else:
+        st.info("No attendance logs yet.")
+
+elif admin_pass != "":
+    st.sidebar.error("❌ Wrong password! Access denied.")
