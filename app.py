@@ -27,13 +27,13 @@ employees = employees.astype(str)  # Ensure consistent format
 # ==============================
 # Timezone setup
 # ==============================
-CST = pytz.timezone("America/Chicago")  # Explicit CST/CDT timezone
+CST = pytz.timezone("America/Chicago")  # Central Time
 
 # ==============================
 # Attendance logging
 # ==============================
 def log_attendance(emp_id, name, action):
-    now_cst = datetime.now(pytz.utc).astimezone(CST)  # system time converted to CST
+    now_cst = datetime.now(pytz.utc).astimezone(CST)  # system time → CST
     timestamp = now_cst.strftime("%m/%d/%y %I:%M:%S %p")  # mm/dd/yy 12hr format
     log_entry = pd.DataFrame(
         [[emp_id, name, action, timestamp]],
@@ -78,7 +78,7 @@ st.subheader("📊 Attendance Summary (CST)")
 if os.path.exists(ATTENDANCE_FILE):
     df = pd.read_csv(ATTENDANCE_FILE)
 
-    # Flexible timestamp parsing
+    # Parse timestamps flexibly
     df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
     df = df.dropna(subset=["Timestamp"])  
 
@@ -87,4 +87,63 @@ if os.path.exists(ATTENDANCE_FILE):
 
     # ---- Daily Summary ----
     st.markdown("### Today's Attendance Summary")
-    to
+    today = datetime.now(CST).strftime("%m/%d/%y")
+    today_logs = df[df["Date"] == today]
+
+    if not today_logs.empty:
+        daily_summary = []
+        for emp, group in today_logs.groupby("EmpID"):
+            emp_name = group["Name"].iloc[0]
+            checkins = group[group["Action"] == "Check In"]["Timestamp"].sort_values().tolist()
+            checkouts = group[group["Action"] == "Check Out"]["Timestamp"].sort_values().tolist()
+
+            # Calculate total worked time for split shifts
+            total_work = pd.Timedelta(0)
+            for i in range(min(len(checkins), len(checkouts))):
+                total_work += (checkouts[i] - checkins[i])
+
+            work_time_str = str(total_work) if total_work != pd.Timedelta(0) else "0:00:00"
+
+            first_in = checkins[0].strftime("%I:%M:%S %p") if checkins else "-"
+            last_out = checkouts[-1].strftime("%I:%M:%S %p") if checkouts else "-"
+
+            daily_summary.append([
+                emp,
+                emp_name,
+                today,
+                first_in,
+                last_out,
+                work_time_str
+            ])
+
+        daily_df = pd.DataFrame(
+            daily_summary,
+            columns=["EmpID", "Name", "Date", "First Check-In", "Last Check-Out", "Hours Worked"]
+        )
+        st.dataframe(daily_df)
+    else:
+        st.info("No attendance logs for today.")
+
+    # ---- Monthly Summary ----
+    st.markdown("### Monthly Summary (Hours Worked)")
+    df["Month"] = df["Timestamp"].dt.strftime("%Y-%m")  # Year-Month
+    monthly_summary = []
+
+    for (emp, month), group in df.groupby(["EmpID", "Month"]):
+        emp_name = group["Name"].iloc[0]
+        checkins = group[group["Action"] == "Check In"]["Timestamp"].sort_values().tolist()
+        checkouts = group[group["Action"] == "Check Out"]["Timestamp"].sort_values().tolist()
+
+        total_work = pd.Timedelta(0)
+        for i in range(min(len(checkins), len(checkouts))):
+            total_work += (checkouts[i] - checkins[i])
+
+        work_time_str = str(total_work) if total_work != pd.Timedelta(0) else "0:00:00"
+
+        monthly_summary.append([emp, emp_name, month, work_time_str])
+
+    monthly_df = pd.DataFrame(monthly_summary, columns=["EmpID", "Name", "Month", "Hours Worked"])
+    st.dataframe(monthly_df)
+
+else:
+    st.info("No attendance logs yet.")
